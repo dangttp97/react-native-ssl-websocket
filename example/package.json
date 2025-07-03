@@ -11,6 +11,7 @@
     "start": "react-native start"
   },
   "dependencies": {
+    "@react-native-community/cli-platform-android": "^18.0.0",
     "react": "18.2.0",
     "react-native": "0.74.7"
   },
@@ -23,6 +24,7 @@
     "@react-native/typescript-config": "0.74.89",
     "@rnx-kit/metro-config": "^2.1.0",
     "react-native-builder-bob": "^0.40.12",
+    "react-native-monorepo-config": "0.1.8",
     "react-native-test-app": "^4.4.0"
   },
   "engines": {

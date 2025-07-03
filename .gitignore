@@ -80,3 +80,15 @@ lib/
 # React Native Codegen
 ios/generated
 android/generated
+
+.env
+.env.*
+example/.env
+example/.env.*
+example/ios/build/
+example/ios/Pods/
+example/android/build/
+example/android/app/build/
+example/node_modules/
+example/.bundle/
+.yarn/

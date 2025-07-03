@@ -1,12 +1,14 @@
+#import <React/RCTBridgeModule.h>
 
 #ifdef RCT_NEW_ARCH_ENABLED
 #import "RNSslWebsocketSpec.h"
 
-@interface SslWebsocket : NSObject <NativeSslWebsocketSpec>
+@interface SslWebsocket
+    : RCTEventEmitter <NativeSslWebsocketSpec, RCTBridgeModule>
 #else
-#import <React/RCTBridgeModule.h>
+#import <React/RCTEventEmitter.h>
 
-@interface SslWebsocket : NSObject <RCTBridgeModule>
+@interface SslWebsocket : RCTEventEmitter <RCTBridgeModule>
 #endif
 
 @end
