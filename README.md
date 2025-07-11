@@ -21,7 +21,7 @@ import { SSLWebSocket } from 'react-native-ssl-websocket';
 
 const ws = new SSLWebSocket(
   'wss://your-server.com:port',
-  'BASE64_PUBLIC_KEY' // Lấy từ script get_public_key.sh, SHA256(SPKI) Base64 ở depth=0
+  'BASE64_PUBLIC_KEY' // Obtained from get_public_key.sh script, SHA256(SPKI) Base64 at depth=0
 );
 
 ws.onopen = () => {
@@ -41,19 +41,18 @@ ws.onclose = (event) => {
   console.log('WebSocket closed:', event);
 };
 
-// Kết nối
+// Connect
 ws.connect();
 
-// Đóng kết nối (khi cần)
+// Close the connection (when needed)
 // ws.close();
 ```
 
 ### Public Key Pinning
 
-- Dùng script `scripts/get_public_key.sh` để lấy SHA256(SPKI) Base64 của server (dòng base64 đầu tiên, ứng với depth=0 aka server/leaf cert).
-- Dán chuỗi này vào tham số thứ 2 khi khởi tạo `SSLWebSocket`.
-- Nếu server đổi certificate nhưng giữ nguyên public key thì vẫn kết nối được.
-- Nếu không khớp, kết nối sẽ bị huỷ ngay khi bắt tay SSL.
+- Use the script `scripts/get_public_key.sh` to obtain the SHA256(SPKI) Base64 of your server (the first base64 line, corresponding to depth=0 aka server/leaf cert).
+- Paste this string as the second parameter when initializing `SSLWebSocket`.
+- If the server changes its certificate but keeps the same public key, the connection will still succeed.
 
 ## Contributing
 

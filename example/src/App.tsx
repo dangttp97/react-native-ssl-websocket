@@ -13,7 +13,7 @@ import {
 import { SSLWebSocket } from '../../src/index';
 
 const WS_URL = 'wss://consumer-test-socket.finviet.com.vn:6868';
-// Thay thế bằng public key thực của server
+// Replace with your server's actual public key
 const PUBLIC_KEY_BASE64 = 'lBkJsNpE3oCbRUKwLj7hLsKzyXLhefwvt4GqHA4TMHs=';
 
 export default function App() {

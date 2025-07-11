@@ -7,7 +7,7 @@ export class SSLWebSocket {
   publicKeyBase64: string;
   private emitter: NativeEventEmitter;
 
-  // Các handler có thể bị gán lại từ bên ngoài
+  // The handlers can be reassigned from outside
   onopen: ((event: any) => void) | null = null;
   onmessage: ((event: any) => void) | null = null;
   onerror: ((event: any) => void) | null = null;

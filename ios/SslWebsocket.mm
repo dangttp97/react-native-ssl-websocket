@@ -184,7 +184,7 @@ didReceiveChallenge:(NSURLAuthenticationChallenge *)challenge
   
   NSData *rawKey = (__bridge NSData *)publicKeyData;
   
-  // Prefix cho RSA 2048 (nếu server dùng RSA)
+  // Prefix for RSA 2048 (if the server uses RSA)
   const unsigned char rsa2048SPKIPrefix[] = {
     0x30, 0x82, 0x01, 0x22,  // SEQUENCE
     0x30, 0x0d,

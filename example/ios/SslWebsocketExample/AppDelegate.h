@@ -2,7 +2,7 @@
 //  AppDelegate.h
 //  SslWebsocketExample
 //
-//  Created by Trần Thành Phương Đăng on 11/7/25.
+//  Created by Tran Thanh Phuong Dang on 11/7/25.
 //
 
 #import <UIKit/UIKit.h>
