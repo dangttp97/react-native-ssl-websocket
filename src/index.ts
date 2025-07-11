@@ -1,62 +1,54 @@
-import {
-  NativeModules,
-  type EmitterSubscription,
-  NativeEventEmitter,
-} from 'react-native';
+import { NativeModules, NativeEventEmitter } from 'react-native';
 
-export const SslWebsocketNative = NativeModules.SslWebsocket;
-
-export type SslWebsocketOptions = {
-  url: string;
-  publicKey: string; // base64
-};
-
-type EventType = 'open' | 'message' | 'error' | 'close';
-
-const eventMap = {
-  open: 'SslWebsocketOnOpen',
-  message: 'SslWebsocketOnMessage',
-  error: 'SslWebsocketOnError',
-  close: 'SslWebsocketOnClose',
-};
+const SslWebsocketNative = NativeModules.SslWebsocket;
 
 export class SSLWebSocket {
-  private listeners: Partial<Record<EventType, EmitterSubscription>> = {};
-  private options: SslWebsocketOptions;
-  private sslWebsocketEmitter: NativeEventEmitter;
+  url: string;
+  publicKeyBase64: string;
+  private emitter: NativeEventEmitter;
 
-  constructor(options: SslWebsocketOptions) {
-    this.options = options;
-    this.sslWebsocketEmitter = new NativeEventEmitter(SslWebsocketNative);
+  // Các handler có thể bị gán lại từ bên ngoài
+  onopen: ((event: any) => void) | null = null;
+  onmessage: ((event: any) => void) | null = null;
+  onerror: ((event: any) => void) | null = null;
+  onclose: ((event: any) => void) | null = null;
+
+  constructor(url: string, publicKeyBase64: string) {
+    this.url = url;
+    this.publicKeyBase64 = publicKeyBase64;
+    this.emitter = new NativeEventEmitter(NativeModules.SslWebsocket);
+
+    this.emitter.addListener('onOpen', (event) => {
+      if (this.onopen) this.onopen(event);
+    });
+    this.emitter.addListener('onMessage', (event) => {
+      if (this.onmessage) this.onmessage(event);
+    });
+    this.emitter.addListener('onError', (event) => {
+      if (this.onerror) this.onerror(event);
+    });
+    this.emitter.addListener('onClosed', (event) => {
+      if (this.onclose) this.onclose(event);
+    });
   }
 
-  async connect() {
-    await SslWebsocketNative.connect(this.options);
+  private destruct() {
+    this.emitter.removeAllListeners('onOpen');
+    this.emitter.removeAllListeners('onMessage');
+    this.emitter.removeAllListeners('onError');
+    this.emitter.removeAllListeners('onClosed');
   }
 
-  async testEventEmitter() {
-    await SslWebsocketNative.testEventEmitter();
+  connect() {
+    SslWebsocketNative.connect(this.url, this.publicKeyBase64);
   }
 
-  async send(message: any) {
-    return SslWebsocketNative.send(message);
+  send(message: any) {
+    SslWebsocketNative.send(JSON.stringify(message));
   }
 
-  async close(code = 1000, reason = '') {
-    return SslWebsocketNative.close(code, reason);
-  }
-
-  on(event: EventType, listener: (event: any) => void) {
-    const nativeEvent = eventMap[event];
-    const subscription = this.sslWebsocketEmitter.addListener(
-      nativeEvent,
-      listener
-    );
-    this.listeners[event] = subscription;
-  }
-
-  off(event: EventType) {
-    this.listeners[event]?.remove();
-    delete this.listeners[event];
+  close() {
+    SslWebsocketNative.close();
+    this.destruct();
   }
 }

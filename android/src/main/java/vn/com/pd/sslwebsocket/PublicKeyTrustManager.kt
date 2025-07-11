@@ -8,6 +8,7 @@ import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
 import javax.net.ssl.X509TrustManager
 
+@SuppressLint("CustomX509TrustManager")
 class PublicKeyTrustManager(private val expectedKeyBase64: String) : X509TrustManager {
   @SuppressLint("TrustAllX509TrustManager")
   override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}

@@ -1,14 +1,6 @@
 /* eslint-disable react-native/no-inline-styles */
 import { useState, useEffect } from 'react';
-import {
-  StyleSheet,
-  View,
-  Text,
-  Button,
-  ScrollView,
-  NativeEventEmitter,
-  NativeModules,
-} from 'react-native';
+import { StyleSheet, View, Text, Button, ScrollView } from 'react-native';
 import { SSLWebSocket } from '../../src/index';
 
 const WS_URL = 'wss://consumer-test-socket.finviet.com.vn:6868';
@@ -23,75 +15,77 @@ export default function App() {
   const [ws, setWs] = useState<SSLWebSocket | null>(null);
 
   const addLog = (msg: string) => {
-    console.log(msg);
+    // console.log(msg);
     setLog((prev) => [new Date().toLocaleTimeString() + ': ' + msg, ...prev]);
   };
 
   useEffect(() => {
-    const websocket = new SSLWebSocket({
-      url: WS_URL,
-      publicKey: PUBLIC_KEY_BASE64,
-    });
+    const websocket = new SSLWebSocket(WS_URL, PUBLIC_KEY_BASE64);
+
+    listenEvents(websocket);
+    // eventListen();
+
     setWs(websocket);
-
-    const eventEmitter = new NativeEventEmitter(NativeModules.SslWebsocket);
-    eventEmitter.addListener('SslWebsocketOnOpen', () => {
-      addLog('WebSocket opened');
-      setIsConnected(true);
-      setIsConnecting(false);
-    });
-    eventEmitter.addListener('SslWebsocketOnMessage', (msg: string) => {
-      addLog('Message received: ' + msg);
-    });
-    eventEmitter.addListener('SslWebsocketOnError', (err: string) => {
-      addLog('Error: ' + err);
-    });
-    eventEmitter.addListener(
-      'SslWebsocketOnClose',
-      (event: { code?: string; reason?: string }) => {
-        const code = event && event.code !== undefined ? event.code : '';
-        const reason = event && event.reason !== undefined ? event.reason : '';
-        addLog('Closed: ' + code + ' ' + reason);
-        setIsConnected(false);
-        setIsConnecting(false);
-      }
-    );
-
-    websocket.on('open', () => {
-      addLog('WebSocket opened');
-      setIsConnected(true);
-      setIsConnecting(false);
-      websocket.send('Hello');
-    });
-
-    websocket.on('message', (msg: string) => {
-      addLog('Message received: ' + msg);
-    });
-
-    websocket.on('error', (err: string) => {
-      addLog('Error: ' + err);
-      setIsConnected(false);
-      setIsConnecting(false);
-    });
-
-    websocket.on('close', (event: any) => {
-      // Try to extract code and reason if available, otherwise fallback
-      const code = event && event.code !== undefined ? event.code : '';
-      const reason = event && event.reason !== undefined ? event.reason : '';
-      addLog('Closed: ' + code + ' ' + reason);
-      setIsConnected(false);
-      setIsConnecting(false);
-    });
 
     return () => {
       websocket.close();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // const eventListen = () => {
+  //   const eventListener = new NativeEventEmitter(NativeModules.SslWebsocket);
+  //   eventListener.addListener('onOpen', () => {
+  //     addLog(
+  //       `WebSocket opened in ${WS_URL} with public key ${PUBLIC_KEY_BASE64}`
+  //     );
+  //     setIsConnected(true);
+  //     setIsConnecting(false);
+  //   });
+  //   eventListener.addListener('onMessage', (event: any) => {
+  //     addLog(`Received message: ${event}`);
+  //   });
+  //   eventListener.addListener('onError', (data) => {
+  //     addLog(`WebSocket error: ${data}`);
+  //   });
+  //   eventListener.addListener('onClosing', (data) => {
+  //     addLog(`WebSocket closing: ${data}`);
+  //     setIsConnected(false);
+  //     setIsConnecting(false);
+  //   });
+  //   eventListener.addListener('onClosed', (data) => {
+  //     addLog(`WebSocket closed: ${data}`);
+  //     setIsConnected(false);
+  //     setIsConnecting(false);
+  //   });
+  // };
+
+  const listenEvents = (websocket: SSLWebSocket) => {
+    websocket.onopen = () => {
+      addLog('WebSocket opened');
+      setIsConnected(true);
+      setIsConnecting(false);
+    };
+
+    websocket.onmessage = (event) => {
+      addLog(`Received message: ${event}`);
+    };
+
+    websocket.onerror = (event) => {
+      addLog(`WebSocket error: ${event}`);
+    };
+
+    websocket.onclose = (event) => {
+      addLog(`WebSocket closing: ${event}`);
+      setIsConnected(false);
+      setIsConnecting(false);
+    };
+  };
 
   const handleConnect = async () => {
     setIsConnecting(true);
     await ws?.connect();
-    setIsConnecting(false);
   };
 
   const handleSend = async () => {
