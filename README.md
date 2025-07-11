@@ -8,6 +8,12 @@ SSL Pinning capable WebSocket library for React Native (Android & iOS)
 npm install react-native-ssl-websocket
 ```
 
+or
+
+```sh
+yarn add react-native-ssl-websocket
+```
+
 ## Usage
 
 ```js
