@@ -8,9 +8,9 @@ import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
 import javax.net.ssl.X509TrustManager
 
-@SuppressLint("CustomX509TrustManager")
-class PublicKeyTrustManager(private val expectedKeyBase64: String) : X509TrustManager {
-  @SuppressLint("TrustAllX509TrustManager")
+import java.security.MessageDigest
+
+class PublicKeyTrustManager(private val expectedKeyHashBase64: String) : X509TrustManager {
   override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
 
   override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
@@ -20,10 +20,10 @@ class PublicKeyTrustManager(private val expectedKeyBase64: String) : X509TrustMa
 
     val cert = chain[0]
     val publicKey: PublicKey = cert.publicKey
-    val actualKeyBase64 = Base64.encodeToString(publicKey.encoded, Base64.NO_WRAP)
+    val publicKeyBytes = publicKey.encoded // Still in SPKI format
 
-    if (actualKeyBase64 != expectedKeyBase64) {
-      throw CertificateException("Public key pinning failure")
-    }
+    val hash = MessageDigest.getInstance("SHA-256").digest(publicKey.encoded)
+    val hashBase64 = Base64.encodeToString(hash, Base64.NO_WRAP)
+    if (hashBase64 != expectedKeyHashBase64) throw CertificateException("Pinning failed")
   }
 }

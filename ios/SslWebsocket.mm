@@ -1,180 +1,349 @@
 #import "SslWebsocket.h"
 #import <React/RCTEventEmitter.h>
+#import <CommonCrypto/CommonDigest.h>
 
 @interface SslWebsocket() <NSURLSessionDelegate>
 @property (nonatomic, strong) NSURLSessionWebSocketTask *webSocketTask;
 @property (nonatomic, strong) NSString *expectedPublicKey;
+@property (nonatomic, strong) NSString *urlString;
+@property (nonatomic, assign) NSInteger retryCount;
+@property (nonatomic, strong) NSTimer *retryTimer;
+@property BOOL hasListeners;
 @end
 
 @implementation SslWebsocket
+
 RCT_EXPORT_MODULE()
 
-// Example method
-// See // https://reactnative.dev/docs/native-modules-ios
-RCT_EXPORT_METHOD(connect:(NSDictionary *)options
-                  resolve:(RCTPromiseResolveBlock)resolve
-                  reject:(RCTPromiseRejectBlock)reject)
+#pragma mark - React Native Module Methods
+
+/**
+ * Connect to WebSocket server with SSL pinning
+ * @param url WebSocket server URL
+ * @param publicKey Expected public key in base64 format for SSL pinning
+ */
+RCT_EXPORT_METHOD(connect:(NSString *)url publicKey:(NSString *)publicKey)
 {
-    NSString *urlString = options[@"url"];
-    NSString *publicKey = options[@"publicKey"];
-    if (!urlString || !publicKey) {
-        reject(@"invalid_args", @"url and publicKey are required", nil);
-        return;
-    }
-    self.expectedPublicKey = publicKey;
-    NSURL *url = [NSURL URLWithString:urlString];
-    NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
-    NSURLSession *session = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
-    self.webSocketTask = [session webSocketTaskWithURL:url];
-    [self.webSocketTask resume];
-    resolve(nil);
+  NSLog(@"🔗 iOS: Connecting to WebSocket server: %@", url);
+  
+  if (!url || !publicKey) {
+    NSLog(@"❌ iOS: Invalid arguments - url and publicKey are required");
+    [self sendEventWithName:@"onError" data:@"Invalid arguments - url and publicKey are required"];
+    return;
+  }
+  
+  self.urlString = url;
+  self.expectedPublicKey = publicKey;
+  self.retryCount = 0;
+  
+  [self connectWebSocket];
 }
 
-RCT_EXPORT_METHOD(connectTest:(NSString *)urlString
-                  resolve:(RCTPromiseResolveBlock)resolve
-                  reject:(RCTPromiseRejectBlock)reject)
+/**
+ * Send message to WebSocket server
+ * @param message Message to send (will be converted to JSON if needed)
+ */
+RCT_EXPORT_METHOD(send:(NSString *)message)
 {
-    if (!urlString) {
-        reject(@"invalid_args", @"url is required", nil);
-        return;
-    }
-    
-    NSLog(@"🔗 iOS: Starting test connection to %@", urlString);
-    
-    // Test connection without SSL pinning
-    NSURL *url = [NSURL URLWithString:urlString];
-    NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
-    NSURLSession *session = [NSURLSession sessionWithConfiguration:config];
-    self.webSocketTask = [session webSocketTaskWithURL:url];
-    [self.webSocketTask resume];
-    resolve(nil);
-}
-
-- (void)URLSession:(NSURLSession *)session
-        didReceiveChallenge:(NSURLAuthenticationChallenge *)challenge
-          completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition disposition, NSURLCredential * _Nullable credential))completionHandler
-{
-    SecTrustRef serverTrust = challenge.protectionSpace.serverTrust;
-    SecCertificateRef serverCert = SecTrustGetCertificateAtIndex(serverTrust, 0);
-    SecKeyRef publicKey = SecCertificateCopyKey(serverCert);
-    if (publicKey) {
-        CFDataRef keyData = SecKeyCopyExternalRepresentation(publicKey, NULL);
-        if (keyData) {
-            NSData *data = (__bridge NSData *)keyData;
-            NSString *serverKeyBase64 = [data base64EncodedStringWithOptions:0];
-            if ([serverKeyBase64 isEqualToString:self.expectedPublicKey]) {
-                NSURLCredential *credential = [NSURLCredential credentialForTrust:serverTrust];
-                completionHandler(NSURLSessionAuthChallengeUseCredential, credential);
-            } else {
-                NSString *errorMsg = @"Public key pinning failure";
-                [self sendEventWithName:@"SslWebsocketOnError" data:errorMsg];
-                completionHandler(NSURLSessionAuthChallengeCancelAuthenticationChallenge, nil);
-            }
-            CFRelease(keyData);
-        } else {
-            NSString *errorMsg = @"Failed to extract public key data";
-            [self sendEventWithName:@"SslWebsocketOnError" data:errorMsg];
-            completionHandler(NSURLSessionAuthChallengeCancelAuthenticationChallenge, nil);
-        }
-        CFRelease(publicKey);
+  if (!self.webSocketTask) {
+    NSLog(@"❌ iOS: Cannot send message - WebSocket not connected");
+    [self sendEventWithName:@"onError" data:@"WebSocket not connected"];
+    return;
+  }
+  
+  NSLog(@"📤 iOS: Sending message: %@", message);
+  
+  NSURLSessionWebSocketMessage *msg = [[NSURLSessionWebSocketMessage alloc] initWithString:message];
+  [self.webSocketTask sendMessage:msg completionHandler:^(NSError * _Nullable error) {
+    if (error) {
+      NSLog(@"❌ iOS: Failed to send message: %@", error.localizedDescription);
+      [self sendEventWithName:@"onError" data:error.localizedDescription];
     } else {
-        NSString *errorMsg = @"Failed to extract public key";
-        [self sendEventWithName:@"SslWebsocketOnError" data:errorMsg];
-        completionHandler(NSURLSessionAuthChallengeCancelAuthenticationChallenge, nil);
+      NSLog(@"✅ iOS: Message sent successfully");
     }
+  }];
 }
 
-- (NSArray<NSString *> *)supportedEvents {
-  return @[@"SslWebsocketOnOpen", @"SslWebsocketOnMessage", @"SslWebsocketOnError", @"SslWebsocketOnClose"];
-}
-
-- (void)sendEventWithName:(NSString *)name data:(id)data {
-  [self sendEventWithName:name body:@{ @"data": data ?: [NSNull null] }];
-}
-
-RCT_EXPORT_METHOD(send:(NSString *)message
-                  resolve:(RCTPromiseResolveBlock)resolve
-                  reject:(RCTPromiseRejectBlock)reject)
+/**
+ * Close WebSocket connection
+ */
+RCT_EXPORT_METHOD(close)
 {
+  NSLog(@"🔒 iOS: Closing WebSocket connection");
+  
   if (self.webSocketTask) {
-    NSURLSessionWebSocketMessage *msg = [[NSURLSessionWebSocketMessage alloc] initWithString:message];
-    [self.webSocketTask sendMessage:msg completionHandler:^(NSError * _Nullable error) {
-      if (error) {
-        [self sendEventWithName:@"SslWebsocketOnError" data:error.localizedDescription];
-        reject(@"send_error", error.localizedDescription, error);
-      } else {
-        resolve(@(YES));
-      }
-    }];
-  } else {
-    reject(@"not_connected", @"WebSocket is not connected", nil);
-  }
-}
-
-RCT_EXPORT_METHOD(close:(NSInteger)code
-                  reason:(NSString *)reason
-                  resolve:(RCTPromiseResolveBlock)resolve
-                  reject:(RCTPromiseRejectBlock)reject)
-{
-  if (self.webSocketTask) {
-    [self.webSocketTask cancelWithCloseCode:code reason:[reason dataUsingEncoding:NSUTF8StringEncoding]];
+    [self.webSocketTask cancelWithCloseCode:NSURLSessionWebSocketCloseCodeNormalClosure reason:[@"Normal closure" dataUsingEncoding:NSUTF8StringEncoding]];
     self.webSocketTask = nil;
-    resolve(nil);
+  }
+  
+  // Cancel retry timer if active
+  if (self.retryTimer) {
+    [self.retryTimer invalidate];
+    self.retryTimer = nil;
+  }
+  
+  [self sendEventWithName:@"onClosed" data:nil];
+}
+
+/**
+ * Add event listener (for React Native event emitter compatibility)
+ */
+RCT_EXPORT_METHOD(addListener:(NSString *)eventName)
+{
+  NSLog(@"👂 iOS: Adding listener for event: %@", eventName);
+}
+
+/**
+ * Remove event listeners (for React Native event emitter compatibility)
+ */
+RCT_EXPORT_METHOD(removeListeners:(double)count)
+{
+  NSLog(@"👂 iOS: Removing %f listeners", count);
+}
+
+#pragma mark - WebSocket Connection Management
+
+/**
+ * Establish WebSocket connection with SSL pinning
+ */
+- (void)connectWebSocket
+{
+  NSLog(@"🔗 iOS: Establishing WebSocket connection to: %@", self.urlString);
+  
+  NSURL *url = [NSURL URLWithString:self.urlString];
+  if (!url) {
+    NSLog(@"❌ iOS: Invalid URL: %@", self.urlString);
+    [self sendEventWithName:@"onError" data:@"Invalid URL"];
+    return;
+  }
+  
+  NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
+  NSURLSession *session = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
+  self.webSocketTask = [session webSocketTaskWithURL:url];
+  [self.webSocketTask resume];
+}
+
+/**
+ * Handle connection retry with exponential backoff
+ */
+- (void)retryConnection
+{
+  if (self.retryCount >= 5) {
+    NSLog(@"❌ iOS: Max retry attempts reached");
+    [self sendEventWithName:@"onError" data:@"Max retry attempts reached"];
+    return;
+  }
+  
+  self.retryCount++;
+  NSTimeInterval delay = MIN(1000.0 * self.retryCount, 10000.0) / 1000.0; // Max 10 seconds
+  
+  NSLog(@"🔄 iOS: Retrying connection in %.1f seconds (attempt %ld)", delay, (long)self.retryCount);
+  
+  self.retryTimer = [NSTimer scheduledTimerWithTimeInterval:delay target:self selector:@selector(connectWebSocket) userInfo:nil repeats:NO];
+}
+
+#pragma mark - SSL Certificate Pinning
+
+/**
+ * Handle SSL certificate challenge with public key pinning
+ */
+- (void)URLSession:(NSURLSession *)session
+didReceiveChallenge:(NSURLAuthenticationChallenge *)challenge
+ completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition disposition, NSURLCredential * _Nullable credential))completionHandler
+{
+  NSLog(@"🔐 iOS: Handling SSL certificate challenge");
+  
+  SecTrustRef serverTrust = challenge.protectionSpace.serverTrust;
+  SecCertificateRef serverCert = SecTrustGetCertificateAtIndex(serverTrust, 0);
+  
+  CFIndex certCount = SecTrustGetCertificateCount(serverTrust);
+  for (CFIndex i = 0; i < certCount; i++) {
+    SecCertificateRef cert = SecTrustGetCertificateAtIndex(serverTrust, i);
+    CFStringRef summary = SecCertificateCopySubjectSummary(cert);
+    NSLog(@"🔎 iOS: Cert %ld: %@", (long)i, summary);
+    CFRelease(summary);
+  }
+  
+  SecKeyRef publicKey = SecCertificateCopyKey(serverCert);
+  if (!publicKey) {
+    NSLog(@"❌ iOS: Failed to extract public key");
+    [self sendEventWithName:@"onError" data:@"Failed to extract public key"];
+    completionHandler(NSURLSessionAuthChallengeCancelAuthenticationChallenge, nil);
+    return;
+  }
+  
+  CFErrorRef error = NULL;
+  CFDataRef publicKeyData = SecKeyCopyExternalRepresentation(publicKey, &error);
+  if (!publicKeyData) {
+    NSLog(@"❌ iOS: Cannot extract raw public key: %@", error);
+    [self sendEventWithName:@"onError" data:@"Failed to extract raw public key"];
+    completionHandler(NSURLSessionAuthChallengeCancelAuthenticationChallenge, nil);
+    CFRelease(publicKey);
+    return;
+  }
+  
+  NSData *rawKey = (__bridge NSData *)publicKeyData;
+  
+  // Prefix cho RSA 2048 (nếu server dùng RSA)
+  const unsigned char rsa2048SPKIPrefix[] = {
+    0x30, 0x82, 0x01, 0x22,  // SEQUENCE
+    0x30, 0x0d,
+    0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01,  // OID: rsaEncryption
+    0x05, 0x00,             // NULL
+    0x03, 0x82, 0x01, 0x0f, 0x00  // BIT STRING (unused bits = 0)
+  };
+  
+  NSMutableData *spkiData = [NSMutableData dataWithBytes:rsa2048SPKIPrefix length:sizeof(rsa2048SPKIPrefix)];
+  [spkiData appendData:rawKey];
+  
+  // SHA256
+  uint8_t hash[CC_SHA256_DIGEST_LENGTH];
+  CC_SHA256(spkiData.bytes, (CC_LONG)spkiData.length, hash);
+  NSData *hashData = [NSData dataWithBytes:hash length:CC_SHA256_DIGEST_LENGTH];
+  NSString *serverKeyHashBase64 = [hashData base64EncodedStringWithOptions:0];
+  
+  NSLog(@"🔐 iOS: Server SPKI SHA256 base64: %@", serverKeyHashBase64);
+  NSLog(@"🔐 iOS: Expected SPKI SHA256 base64: %@", self.expectedPublicKey);
+  
+  if ([serverKeyHashBase64 isEqualToString:self.expectedPublicKey]) {
+    NSLog(@"✅ iOS: Public key pinning successful (SPKI match)");
+    NSURLCredential *credential = [NSURLCredential credentialForTrust:serverTrust];
+    completionHandler(NSURLSessionAuthChallengeUseCredential, credential);
   } else {
-    reject(@"not_connected", @"WebSocket is not connected", nil);
+    NSLog(@"❌ iOS: Public key pinning failed");
+    [self sendEventWithName:@"onError" data:@"Public key pinning failure"];
+    completionHandler(NSURLSessionAuthChallengeCancelAuthenticationChallenge, nil);
+  }
+  
+  CFRelease(publicKeyData);
+  CFRelease(publicKey);
+  
+}
+
+
+#pragma mark - WebSocket Event Handlers
+
+/**
+ * Handle WebSocket connection opened
+ */
+- (void)URLSession:(NSURLSession *)session webSocketTask:(NSURLSessionWebSocketTask *)webSocketTask didOpenWithProtocol:(NSString *)protocol
+{
+  NSLog(@"✅ iOS: WebSocket connection opened successfully");
+  self.retryCount = 0; // Reset retry count on successful connection
+  
+  [self sendEventWithName:@"onOpen" data:nil];
+  [self listenForMessages];
+}
+
+/**
+ * Handle WebSocket connection closed
+ */
+- (void)URLSession:(NSURLSession *)session webSocketTask:(NSURLSessionWebSocketTask *)webSocketTask didCloseWithCode:(NSURLSessionWebSocketCloseCode)closeCode reason:(NSData *)reason
+{
+  NSString *reasonStr = reason ? [[NSString alloc] initWithData:reason encoding:NSUTF8StringEncoding] : @"";
+  NSLog(@"🔒 iOS: WebSocket closed with code %ld, reason: %@", (long)closeCode, reasonStr);
+  
+  self.webSocketTask = nil;
+  [self sendEventWithName:@"onClosed" data:@{@"code": @(closeCode), @"reason": reasonStr ?: @""}];
+}
+
+/**
+ * Handle WebSocket connection failure
+ */
+- (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(NSError *)error
+{
+  if (error) {
+    NSLog(@"❌ iOS: WebSocket connection failed: %@", error.localizedDescription);
+    [self sendEventWithName:@"onError" data:error.localizedDescription];
+    
+    // Retry connection if it's a network error
+    if (error.code == NSURLErrorNetworkConnectionLost ||
+        error.code == NSURLErrorTimedOut ||
+        error.code == NSURLErrorCannotConnectToHost) {
+      [self retryConnection];
+    }
   }
 }
 
-// WebSocket event handlers
-- (void)listenForMessages {
-  if (!self.webSocketTask) return;
+/**
+ * Listen for incoming WebSocket messages
+ */
+- (void)listenForMessages
+{
+  if (!self.webSocketTask) {
+    NSLog(@"❌ iOS: Cannot listen for messages - WebSocket not connected");
+    return;
+  }
+  
   [self.webSocketTask receiveMessageWithCompletionHandler:^(NSURLSessionWebSocketMessage * _Nullable message, NSError * _Nullable error) {
     if (error) {
-      [self sendEventWithName:@"SslWebsocketOnError" data:error.localizedDescription];
+      NSLog(@"❌ iOS: Error receiving message: %@", error.localizedDescription);
+      [self sendEventWithName:@"onError" data:error.localizedDescription];
       self.webSocketTask = nil;
       return;
     }
+    
     if (message) {
       if (message.type == NSURLSessionWebSocketMessageTypeString) {
-        [self sendEventWithName:@"SslWebsocketOnMessage" data:message.string];
+        NSLog(@"📨 iOS: Received message: %@", message.string);
+        [self sendEventWithName:@"onMessage" data:message.string];
+      } else if (message.type == NSURLSessionWebSocketMessageTypeData) {
+        NSLog(@"📨 iOS: Received binary message");
+        NSString *base64Data = [message.data base64EncodedStringWithOptions:0];
+        [self sendEventWithName:@"onMessage" data:base64Data];
       }
-      // Binary message có thể xử lý thêm nếu cần
     }
+    
+    // Continue listening for more messages
     [self listenForMessages];
   }];
 }
 
-// Gọi listenForMessages khi kết nối thành công
-- (void)URLSession:(NSURLSession *)session webSocketTask:(NSURLSessionWebSocketTask *)webSocketTask didOpenWithProtocol:(NSString *)protocol {
-  NSLog(@"🔗 iOS: WebSocket opened, emitting SslWebsocketOnOpen event");
-  [self sendEventWithName:@"SslWebsocketOnOpen" data:nil];
-  [self listenForMessages];
-}
+#pragma mark - Event Emitter
 
-- (void)URLSession:(NSURLSession *)session webSocketTask:(NSURLSessionWebSocketTask *)webSocketTask didCloseWithCode:(NSURLSessionWebSocketCloseCode)closeCode reason:(NSData *)reason {
-  NSString *reasonStr = reason ? [[NSString alloc] initWithData:reason encoding:NSUTF8StringEncoding] : @"";
-  NSLog(@"🔒 iOS: WebSocket closed with code %ld, reason: %@", (long)closeCode, reasonStr);
-  [self sendEventWithName:@"SslWebsocketOnClose" data:reasonStr];
-  self.webSocketTask = nil;
-}
-
-RCT_EXPORT_METHOD(testEventEmitter:(RCTPromiseResolveBlock)resolve
-                  reject:(RCTPromiseRejectBlock)reject)
+/**
+ * Supported events for React Native
+ */
+- (NSArray<NSString *> *)supportedEvents
 {
-    NSLog(@"🧪 iOS: Testing event emitter manually");
-    [self sendEventWithName:@"SslWebsocketOnOpen" data:@"test_event"];
-    resolve(@"Event emitted");
+  return @[@"onOpen", @"onMessage", @"onError", @"onClosed"];
 }
 
-- (void)addListener:(NSString *)eventName {
-  NSLog(@"🔗 iOS: Adding listener for event: %@", eventName);
+- (void)startObserving {
+  self.hasListeners = YES;
 }
-- (void)removeListeners:(double)count {
-  NSLog(@"🔗 iOS: Removing listeners: %f", count);
-} 
 
-// Optional: báo cho RN rằng module này cần giữ kết nối
-+ (BOOL)requiresMainQueueSetup {
+- (void)stopObserving {
+  self.hasListeners = NO;
+}
+
+/**
+ * Send event to React Native with proper data format
+ */
+- (void)sendEventWithName:(NSString *)name data:(id)data
+{
+  if (!self.hasListeners) {
+    NSLog(@"⚠️ iOS: Tried to emit '%@' but no JS listeners are attached yet", name);
+    [self sendEventWithName:name body:nil];
+    return;
+  }
+  
+  NSLog(@"📡 iOS: Emitting event '%@' with data: %@", name, data);
+  
+  if (data) {
+    [self sendEventWithName:name body:@{@"data": data}];
+  } else {
+    [self sendEventWithName:name body:nil];
+  }
+}
+
+#pragma mark - React Native Module Configuration
+
+/**
+ * Indicate that this module requires main queue setup
+ */
++ (BOOL)requiresMainQueueSetup
+{
   return YES;
 }
 

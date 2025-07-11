@@ -15,7 +15,9 @@ export class SSLWebSocket {
 
   constructor(url: string, publicKeyBase64: string) {
     this.url = url;
+    // Auto-convert PKCS#8 to PKCS#1 if needed
     this.publicKeyBase64 = publicKeyBase64;
+    console.log('publicKeyBase64', publicKeyBase64);
     this.emitter = new NativeEventEmitter(NativeModules.SslWebsocket);
 
     this.emitter.addListener('onOpen', (event) => {

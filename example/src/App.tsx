@@ -1,12 +1,20 @@
 /* eslint-disable react-native/no-inline-styles */
 import { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, Button, ScrollView } from 'react-native';
+import {
+  StyleSheet,
+  View,
+  Text,
+  Button,
+  ScrollView,
+  SafeAreaView,
+  // NativeEventEmitter,
+  // NativeModules,
+} from 'react-native';
 import { SSLWebSocket } from '../../src/index';
 
 const WS_URL = 'wss://consumer-test-socket.finviet.com.vn:6868';
 // Thay thế bằng public key thực của server
-const PUBLIC_KEY_BASE64 =
-  'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAj1der5MeuE6MJRBYg22XSyEryDk9sy+30Q0NSccVAQg8O7Xst+TBzQ/U3d5tbnfQ7wsQoRgk2mVWWPUnDuqFQOsUBLrspQYxD7ypHIlydF6tBoqr/Lkf0rW8eKGRR1dMt/YTSLS416pQVhr9DxUGvIxaY9LgtIeqxIpENfTJkUC+9oZpLtI4HOHKZkx+X6EokjvdEAOF4D8C4MH+iPzDhVO8pIWLE6rDPxPZ512dN7Lai3AmcN8XLi7IB3MFPc1UXbOEhrBojHb214HeXrrOaFGB97DXALyn0XUBAjuJKAcrPMcydHxQkIOvOzzI9KmQ6gCM9Mnna4koqQr5DSdhdwIDAQAB';
+const PUBLIC_KEY_BASE64 = 'lBkJsNpE3oCbRUKwLj7hLsKzyXLhefwvt4GqHA4TMHs=';
 
 export default function App() {
   const [log, setLog] = useState<string[]>([]);
@@ -33,7 +41,6 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   // const eventListen = () => {
   //   const eventListener = new NativeEventEmitter(NativeModules.SslWebsocket);
   //   eventListener.addListener('onOpen', () => {
@@ -121,7 +128,7 @@ export default function App() {
   const renderSeparator = () => <View style={{ height: 10 }} />;
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <Text style={styles.status}>
         Status:{' '}
         {isConnecting
@@ -152,7 +159,7 @@ export default function App() {
           </Text>
         ))}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
