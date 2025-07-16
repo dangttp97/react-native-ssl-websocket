@@ -1,7 +1,4 @@
-import {
-  NativeModules,
-  NativeEventEmitter,
-} from '../example/node_modules/react-native';
+import { NativeModules, NativeEventEmitter } from 'react-native';
 
 const SslWebsocketNative = NativeModules.SslWebsocket;
 
