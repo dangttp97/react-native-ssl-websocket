@@ -1,0 +1,13 @@
+diff --git a/node_modules/react-native-test-app/ReactTestApp-DevSupport.podspec b/node_modules/react-native-test-app/ReactTestApp-DevSupport.podspec
+index cdd468b..efcc2ff 100644
+--- a/node_modules/react-native-test-app/ReactTestApp-DevSupport.podspec
++++ b/node_modules/react-native-test-app/ReactTestApp-DevSupport.podspec
+@@ -7,7 +7,7 @@ deployment_target = lambda do |target_platform|
+   xcodeproj = File.join(__dir__, target_platform.to_s, 'ReactTestApp.xcodeproj')
+   project = Xcodeproj::Project.open(xcodeproj)
+   settings = {
+-    ios: 'IPHONEOS_DEPLOYMENT_TARGET',
++    ios: '15.0',
+     macos: 'MACOSX_DEPLOYMENT_TARGET',
+     visionos: 'XROS_DEPLOYMENT_TARGET',
+   }
