@@ -1,6 +1,6 @@
 {
   "name": "react-native-ssl-websocket",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "SSL Pinning capable Websocket library for React Native",
   "source": "./src/index.tsx",
   "main": "./lib/commonjs/index.js",
