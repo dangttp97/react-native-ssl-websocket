@@ -184,5 +184,9 @@
     "type": "module-legacy",
     "languages": "kotlin-objc",
     "version": "0.43.0"
+  },
+  "directories": {
+    "example": "example",
+    "lib": "lib"
   }
 }
